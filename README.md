@@ -25,11 +25,14 @@ Schnapp dir deine Freunde, Kollegen oder Familie und los geht's:
 
 ## ✨ Features im Überblick
 
+- **📐 Flexible Rastergrößen:** Der Host kann beim Erstellen zwischen 3x3 (für sehr schnelle Runden), 4x4 oder dem klassischen 5x5 Raster wählen.
 - **🕹️ Keine Vorgaben:** Ihr bestimmt die Begriffe! Perfekt für Büro-Meetings, Trash-TV-Abende oder als Trinkspiel.
 - **⚡ Echtzeit-Action:** Sieh live, wie andere Spieler Felder abhaken. Du bekommst Pop-up-Benachrichtigungen bei Aktionen der anderen.
-- **📱 Optimiert für Handys:** Die App fühlt sich auf dem Smartphone an wie eine native App (kein nerviges Zoomen, perfekte Touch-Steuerung, Momentum-Scrolling).
+- **📱 Als App installierbar (PWA):** Füge die Seite deinem Home-Bildschirm auf iOS/Android hinzu und nutze sie als vollwertige native App mit eigenem Icon.
 - **👀 Spicken erlaubt:** Du kannst jederzeit die Karten deiner Mitspieler ansehen (ohne sie verändern zu können).
-- **🔄 Neu starten:** Mit einem Klick auf "Neue Runde" werden alle Karten zurückgesetzt und ihr könnt direkt ein neues Spiel starten.
+- **🔄 Smarte Revanche:** Mit einem Klick auf "Neue Runde" springen alle Spieler zurück in die Vorbereitungsphase. Das geniale daran: **Eure eingegebenen Begriffe bleiben erhalten!** Einfach auf "🔀 Mischen" klicken und sofort ein neues Spiel starten.
+- **🧹 Felder leeren:** Vertippt? Über den Papierkorb-Button lassen sich alle Felder mit einem Klick wieder löschen.
+- **🚪 Clevere Session-Logik:** Verlässt der Host das Spiel, werden alle anderen Spieler automatisch zurück ins Hauptmenü geleitet (Auto-Kick), damit niemand in "Geister-Lobbys" festhängt.
 - **🛡️ Verbindungsabbruch? Kein Problem:** Dein Spielfortschritt wird lokal gespeichert. Wenn du die Seite neu lädst, bist du sofort wieder im laufenden Spiel.
 
 ---
@@ -51,6 +54,7 @@ sessions/
   {SESSION_ID}/
     phase:    "lobby" | "fill" | "play"
     host:     {PLAYER_ID}
+    gridSize: 3 | 4 | 5
     createdAt: {timestamp}
     players/
       {PLAYER_ID}/
@@ -83,13 +87,13 @@ Alle Clients haben Firebase-Listener (`onValue`) auf diesem Pfad abonniert. Wech
 ### Design-Entscheidungen & Herausforderungen
 
 1. **State Persistence (Reload-Schutz):**  
-   Damit ein versehentlicher Reload auf dem Smartphone nicht das Spiel zerstört, wird der aktuelle Client-State (Session-ID, Player-ID, Host-Status) nach jeder Aktion via `sessionStorage` lokal gesichert. Beim Neuladen prüft `tryRestore()`, ob die Session in Firebase noch existiert und reiht den Spieler nahtlos wieder in die richtige Spielphase ein.
-2. **Firebase Array-Normalisierung (`toArr`):**  
-   Firebase Realtime Database unterstützt native Arrays nur mäßig und konvertiert sogenannte "Sparse Arrays" (Arrays mit Lücken) gerne in Objekte. Um Bugs beim Mapping der 5x5 Matrix zu verhindern, gibt es eine clevere `toArr()` Helferfunktion, die sicherstellt, dass die Kartendaten immer als iterierbares Array vorliegen.
-3. **Event Log & Notification System:**  
-   Die "Activity Log" (wer hat was wann abgehakt) wird als append-only Log (`push()`) in Firebase realisiert. Clients sortieren diese nach Timestamp. Ein Timer-Mechanismus sorgt dafür, dass nur Events triggern (und Live-Toasts anzeigen), deren Timestamp *neuer* ist als der lokale `lastEventTs`.
-4. **Isolierte Sessions:**  
-   Es gibt keine globalen Daten. Alles ist strikt unter einer `sessionId` gekapselt. Ein "Neue Runde"-Reset (`remove()` auf Karten und Events) in Session A hat null Auswirkungen auf Session B.
+   Damit ein versehentlicher Reload auf dem Smartphone nicht das Spiel zerstört, wird der aktuelle Client-State (Session-ID, Player-ID, Host-Status, etc.) nach jeder Aktion via `sessionStorage` lokal gesichert. Beim Neuladen prüft `tryRestore()`, ob die Session in Firebase noch existiert und reiht den Spieler nahtlos wieder ein.
+2. **Dynamische Raster-Architektur:**  
+   Die Layouts und Bingo-Gewinn-Abfragen (`getLines()`) sind vollständig algorithmisch aufgebaut. Anstatt harter 25er-Werte generiert die App die Matrix-Gewinnlinien (Zeilen, Spalten, Diagonalen) prozedural basierend auf der initialen Wahl des Hosts (GridSize = 3, 4 oder 5).
+3. **Firebase Array-Normalisierung (`toArr`):**  
+   Firebase Realtime Database unterstützt native Arrays nur mäßig und konvertiert sogenannte "Sparse Arrays" (Arrays mit Lücken) gerne in Objekte. Um Bugs beim Mapping der Matrix zu verhindern, gibt es eine clevere `toArr()` Helferfunktion.
+4. **Isolierte Sessions & Host-Rechte:**  
+   Es gibt keine globalen Daten. Alles ist strikt unter einer `sessionId` gekapselt. Wenn der Host die Session über den "🚪 Verlassen" Button schließt, wird der gesamte Firebase-Knoten der Session gelöscht. Listener bei den anderen Clients erkennen das sofort (`!snap.exists()`) und werfen die Spieler sauber zurück in ihr Startmenü.
 
 ---
 
