@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BINGO</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e10;
+    --surface: #1a1a1e;
+    --surface2: #242428;
+    --border: #2e2e34;
+    --accent: #f0c040;
+    --accent2: #e0502a;
+    --accent3: #4caf89;
+    --text: #f0ede8;
+    --text-muted: #7a7a82;
+    --marked: #f0c040;
+    --marked-text: #0e0e10;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    /* Prevent bounce scroll on iOS */
+    overscroll-behavior: none;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.4;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  }
+  header {
+    width: 100%; padding: 20px 20px 0;
+    display: flex; align-items: flex-end; gap: 12px; position: relative; z-index: 1;
+  }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(44px, 10vw, 80px); letter-spacing: 0.08em; line-height: 0.9;
+    color: var(--accent); text-shadow: 3px 3px 0 var(--accent2); user-select: none;
+  }
+  .logo-sub {
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--text-muted); padding-bottom: 12px;
+  }
+  .screen {
+    display: none; flex-direction: column; align-items: center;
+    width: 100%; max-width: 680px; padding: 20px 16px 100px;
+    position: relative; z-index: 1;
+  }
+  .screen.active { display: flex; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; width: 100%; margin-bottom: 12px;
+  }
+  .panel-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: 18px;
+    letter-spacing: 0.1em; color: var(--accent); margin-bottom: 14px;
+  }
+  input[type="text"] {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-family: 'DM Sans', sans-serif;
+    font-size: 16px; /* 16px prevents iOS zoom */
+    padding: 12px 14px; width: 100%; outline: none; transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  input:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--text-muted); }
+
+  /* ── BUTTONS — bigger touch targets on mobile ── */
+  .btn {
+    font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 0.12em;
+    padding: 14px 24px; border: none; border-radius: 8px; cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s, background 0.15s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 48px; /* touch target */
+    touch-action: manipulation;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #0e0e10; }
+  .btn-primary:hover:not(:disabled) { background: #f5cd55; }
+  .btn-danger  { background: var(--accent2); color: #fff; }
+  .btn-danger:hover:not(:disabled)  { background: #e8613b; }
+  .btn-shuffle { background: #25253a; color: var(--text); border: 1px solid #3a3a55; }
+  .btn-shuffle:hover:not(:disabled) { background: #2e2e48; border-color: var(--accent); color: var(--accent); }
+  .btn-ghost   { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text-muted); }
+  .btn-full { width: 100%; }
+  .label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+  .mt-10 { margin-top: 10px; }
+  .mt-12 { margin-top: 12px; }
+
+  /* ── LOBBY ── */
+  .player-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .player-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface2); border-radius: 8px; padding: 12px 14px; font-size: 14px;
+    min-height: 44px;
+  }
+  .player-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+  .player-dot.me    { background: var(--accent); }
+  .player-dot.ready { background: var(--accent3); }
+  .session-code {
+    background: var(--surface2); border: 1px dashed var(--border); border-radius: 8px;
+    padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+  }
+  .session-code span { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 0.22em; color: var(--accent); }
+  .copy-btn {
+    font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
+    background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    transition: all 0.2s; min-height: 36px; touch-action: manipulation;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .copy-btn.copied { border-color: var(--accent3); color: var(--accent3); }
+
+  /* ── BINGO GRID ── */
+  .bingo-header-row { display: grid; grid-template-columns: repeat(5,1fr); gap: 5px; margin-bottom: 5px; }
+  .bingo-letter { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.1em; text-align: center; color: var(--accent); }
+  .bingo-grid  { display: grid; grid-template-columns: repeat(5,1fr); gap: 5px; width: 100%; }
+
+  /* Cell sizing: fill available width, square */
+  .bingo-cell {
+    aspect-ratio: 1;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    text-align: center;
+    font-size: clamp(7px, 2.4vw, 12px);
+    font-weight: 500; line-height: 1.25;
+    padding: 4px; cursor: pointer;
+    transition: background 0.18s, border-color 0.18s, transform 0.14s;
+    position: relative; overflow: hidden; word-break: break-word; hyphens: auto; user-select: none;
+    touch-action: manipulation;
+  }
+  /* Active state for touch */
+  .bingo-cell:active:not(.editable) { transform: scale(0.95); }
+  .my-card .bingo-cell:hover:not(.marked) { border-color: var(--accent); }
+  .opponent-card .bingo-cell { cursor: default; }
+
+  .bingo-cell.marked {
+    background: var(--marked); border-color: var(--marked);
+    color: var(--marked-text); font-weight: 600;
+  }
+  .bingo-cell.marked::after {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.22), transparent 70%);
+  }
+  .bingo-cell.win-cell {
+    background: var(--accent2); border-color: var(--accent2);
+    color: #fff; animation: pulse-win 0.6s ease infinite alternate;
+  }
+  @keyframes pulse-win {
+    from { box-shadow: 0 0 0 0 rgba(224,80,42,0.5); }
+    to   { box-shadow: 0 0 0 6px rgba(224,80,42,0); }
+  }
+  .bingo-cell.editable { cursor: default; }
+  .bingo-cell textarea {
+    background: transparent; border: none; color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: clamp(7px, 2.4vw, 12px);
+    font-weight: 500; text-align: center; width: 100%; height: 100%;
+    resize: none; outline: none; line-height: 1.25; cursor: text;
+    /* Prevent iOS zoom on focus — font-size must be ≥16px OR we prevent default */
+    touch-action: manipulation;
+  }
+  .fill-controls { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .fill-counter  { font-size: 13px; color: var(--text-muted); margin-left: auto; }
+  .fill-counter span { color: var(--accent); font-weight: 600; }
+
+  /* ── PLAYER TABS ── */
+  .player-tabs {
+    display: flex; gap: 6px; width: 100%;
+    overflow-x: auto; padding-bottom: 4px;
+    scrollbar-width: none; margin-bottom: 12px;
+    flex-wrap: wrap;
+    /* Momentum scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+  }
+  .player-tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+    padding: 10px 14px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted);
+    transition: all 0.18s; white-space: nowrap; flex-shrink: 0;
+    display: flex; align-items: center; gap: 6px;
+    min-height: 40px; touch-action: manipulation;
+  }
+  .tab:hover { border-color: var(--text-muted); color: var(--text); }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #0e0e10; }
+  .tab .tab-bingo { font-size: 10px; background: var(--accent2); color: #fff; padding: 1px 6px; border-radius: 4px; }
+  .tab.active .tab-bingo { background: rgba(0,0,0,0.2); color: #fff; }
+
+  .viewing-badge {
+    font-size: 12px; color: var(--text-muted); text-align: center;
+    padding: 6px; margin-bottom: 8px; display: none;
+  }
+  .viewing-badge.show { display: block; }
+  .viewing-badge strong { color: var(--accent); }
+
+  /* ── STATUS ── */
+  .status-bar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 11px 14px; font-size: 13px;
+    color: var(--text-muted); width: 100%; text-align: center; margin-bottom: 12px;
+  }
+  .status-bar.hot  { color: var(--accent2); border-color: rgba(224,80,42,0.4); }
+  .status-bar.bingo-status {
+    border-color: var(--accent2); color: var(--accent2);
+    font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 0.15em;
+    animation: bingo-flash 0.5s ease infinite alternate;
+  }
+  @keyframes bingo-flash {
+    from { background: var(--surface); }
+    to   { background: rgba(224,80,42,0.12); }
+  }
+
+  /* ── PROGRESS ── */
+  .progress-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .progress-player { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .progress-name { width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); flex-shrink: 0; font-size: 12px; }
+  .progress-name.me { color: var(--text); font-weight: 600; }
+  .progress-bar-bg { flex: 1; height: 8px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+  .progress-bar-fill {
+    height: 100%; border-radius: 99px;
+    background: linear-gradient(90deg, var(--accent3), var(--accent));
+    transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+  }
+  .progress-bar-fill.done { background: var(--accent2); }
+  .progress-label { font-size: 11px; color: var(--text-muted); width: 58px; text-align: right; flex-shrink: 0; }
+
+  /* ── ACTIVITY LOG ── */
+  .activity-log {
+    display: flex; flex-direction: column; gap: 5px;
+    max-height: 180px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+  .activity-log:empty::after {
+    content: 'Noch keine Aktionen…'; font-size: 13px; color: var(--text-muted);
+    text-align: center; padding: 16px 0; display: block;
+  }
+  .log-item {
+    display: flex; gap: 8px; align-items: flex-start;
+    background: var(--surface2); border-radius: 7px; padding: 8px 10px;
+    font-size: 12px; animation: log-in 0.28s ease;
+  }
+  @keyframes log-in { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+  .log-time  { color: var(--text-muted); font-size: 10px; white-space: nowrap; margin-top: 1px; flex-shrink: 0; }
+  .log-name  { color: var(--accent); font-weight: 600; }
+  .log-field { color: var(--text-muted); font-style: italic; }
+  .log-bingo { color: var(--accent2); font-weight: 700; }
+
+  /* ── LIVE NOTIFICATION ── */
+  #live-notif {
+    position: fixed; top: 16px; left: 50%;
+    transform: translateX(-50%) translateY(-90px);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 18px; font-size: 13px; color: var(--text);
+    z-index: 200; pointer-events: none;
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s;
+    opacity: 0; max-width: 90vw; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+  }
+  #live-notif.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .notif-inner { display: flex; align-items: center; gap: 8px; }
+  .notif-icon  { font-size: 16px; }
+  .notif-name  { color: var(--accent); font-weight: 600; }
+  .notif-field { color: var(--text-muted); }
+
+  /* ── MODAL ── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 150; align-items: center; justify-content: center; padding: 16px; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 24px; max-width: 400px; width: 100%; text-align: center; animation: modal-in 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+  @keyframes modal-in { from { opacity:0; transform:scale(0.82); } to { opacity:1; transform:scale(1); } }
+  .modal h2 { font-family: 'Bebas Neue', sans-serif; font-size: 48px; letter-spacing: 0.1em; color: var(--accent); text-shadow: 3px 3px 0 var(--accent2); margin-bottom: 4px; }
+  .modal .modal-sub { font-size: 15px; color: var(--text); margin-bottom: 4px; }
+  .modal p { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+  .modal-btns { display: flex; gap: 10px; }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 20px; font-size: 13px; color: var(--text);
+    opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 100;
+    white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ── RECONNECT BANNER ── */
+  #reconnect-banner {
+    display: none; position: fixed; top: 0; left: 0; right: 0;
+    background: rgba(240,192,64,0.15); border-bottom: 1px solid rgba(240,192,64,0.3);
+    color: var(--accent); font-size: 13px; text-align: center;
+    padding: 10px 16px; z-index: 300;
+  }
+  #reconnect-banner.show { display: block; }
+
+  .config-notice { background: rgba(240,192,64,0.08); border: 1px solid rgba(240,192,64,0.3); border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--accent); margin-bottom: 12px; line-height: 1.6; width: 100%; }
+  .config-notice code { background: rgba(240,192,64,0.15); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+  /* ── MOBILE: reduce padding on very small screens ── */
+  @media (max-width: 380px) {
+    .panel { padding: 14px; }
+    .bingo-letter { font-size: 18px; }
+    .bingo-cell { border-radius: 4px; }
+    .tab { padding: 8px 10px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="reconnect-banner">🔄 Verbindung wird wiederhergestellt…</div>
+
+<script type="module">
+import { initializeApp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, update, onValue, push, remove }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// ┌──────────────────────────────────────────────────┐
+// │  FIREBASE CONFIG — Platzhalter hier ersetzen!    │
+// └──────────────────────────────────────────────────┘
+const firebaseConfig = {
+  apiKey:            "AIzaSyDY66z8pC8aaqYctkHDt2ukkCJMSlt5jmE",
+  authDomain:        "bingo-multiplayer-f61b2.firebaseapp.com",
+  databaseURL:       "https://bingo-multiplayer-f61b2-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:         "bingo-multiplayer-f61b2",
+  storageBucket:     "bingo-multiplayer-f61b2.firebasestorage.app",
+  messagingSenderId: "743075368524",
+  appId:             "1:743075368524:web:8e38ecc232f699d0992ee9"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+// ══════════════════════════════════════
+//  SESSION PERSISTENCE (reload-safe)
+// ══════════════════════════════════════
+const SS = {
+  save(data) {
+    try { sessionStorage.setItem('bingo_session', JSON.stringify(data)); } catch(e){}
+  },
+  load() {
+    try { return JSON.parse(sessionStorage.getItem('bingo_session')); } catch(e){ return null; }
+  },
+  clear() {
+    try { sessionStorage.removeItem('bingo_session'); } catch(e){}
+  }
+};
+
+// ── STATE ──
+let sessionId    = null;
+let playerId     = null;
+let playerName   = null;
+let isHost       = false;
+let gamePhase    = 'home';
+let myCard       = Array(25).fill('');
+let myMarked     = Array(25).fill(false);
+let listeners    = [];
+let notifTimer   = null;
+let lastEventTs  = 0;
+let activeTabId  = null;
+let allCards     = {};
+let allPlayers   = {};
+let bingoShown   = false;  // prevent modal from re-showing on re-render
+
+// ── UTILS ──
+const genId = (n=6) => Math.random().toString(36).substring(2,2+n).toUpperCase();
+const toArr = v => Array.isArray(v) ? v : (v ? Object.values(v) : []);
+
+function showToast(msg, dur=2400) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+function showLiveNotif(icon, name, field) {
+  const el = document.getElementById('live-notif');
+  el.querySelector('.notif-icon').textContent  = icon;
+  el.querySelector('.notif-name').textContent  = name;
+  el.querySelector('.notif-field').textContent = field ? ` hat abgehakt: „${field}"` : '';
+  el.classList.add('show');
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+const fmtTime = ts => {
+  const d = new Date(ts);
+  return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+};
+
+function offListeners() { listeners.forEach(fn => fn()); listeners = []; }
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-'+id).classList.add('active');
+}
+
+function persistState() {
+  SS.save({ sessionId, playerId, playerName, isHost, gamePhase, myCard, myMarked });
+}
+
+// ══════════════════════════════════════
+//  RELOAD RECOVERY
+// ══════════════════════════════════════
+async function tryRestore() {
+  const saved = SS.load();
+  if (!saved || !saved.sessionId || !saved.playerId) return false;
+
+  // Check session still exists in Firebase
+  const snap = await get(ref(db, `sessions/${saved.sessionId}`));
+  if (!snap.exists()) { SS.clear(); return false; }
+
+  const session = snap.val();
+
+  // Restore state variables
+  sessionId  = saved.sessionId;
+  playerId   = saved.playerId;
+  playerName = saved.playerName;
+  isHost     = saved.isHost;
+  myCard     = saved.myCard   || Array(25).fill('');
+  myMarked   = saved.myMarked || Array(25).fill(false);
+
+  document.getElementById('reconnect-banner').classList.add('show');
+
+  // Re-enter appropriate phase
+  const phase = session.phase;
+  gamePhase = 'home'; // reset so guards don't block
+
+  if (phase === 'lobby') {
+    enterLobby();
+  } else if (phase === 'fill') {
+    gamePhase = 'lobby'; // allow enterFill
+    enterFill();
+  } else if (phase === 'play') {
+    gamePhase = 'fill'; // allow enterPlay
+    enterPlay();
+  }
+
+  setTimeout(() => document.getElementById('reconnect-banner').classList.remove('show'), 2500);
+  return true;
+}
+
+// ══════════════════════════════════════
+//  HOME
+// ══════════════════════════════════════
+window.createSession = async function() {
+  const name = document.getElementById('home-name').value.trim();
+  if (!name) return showToast('Bitte Namen eingeben');
+  playerName = name; playerId = genId(8); sessionId = genId(6); isHost = true;
+  await set(ref(db,`sessions/${sessionId}`), {
+    host: playerId, phase: 'lobby', createdAt: Date.now(),
+    players: { [playerId]: { name, ready:false, hasBingo:false, marked:0 } }
+  });
+  persistState();
+  enterLobby();
+};
+
+window.joinSession = async function() {
+  const name = document.getElementById('home-name').value.trim();
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  if (!name) return showToast('Bitte Namen eingeben');
+  if (code.length < 6) return showToast('Bitte vollständigen Code eingeben');
+  const snap = await get(ref(db,`sessions/${code}`));
+  if (!snap.exists()) return showToast('Session nicht gefunden');
+  if (snap.val().phase !== 'lobby') return showToast('Spiel läuft bereits — zu spät zum Beitreten');
+  playerName = name; playerId = genId(8); sessionId = code; isHost = false;
+  await set(ref(db,`sessions/${sessionId}/players/${playerId}`),
+    { name, ready:false, hasBingo:false, marked:0 });
+  persistState();
+  enterLobby();
+};
+
+// ══════════════════════════════════════
+//  LOBBY
+// ══════════════════════════════════════
+function enterLobby() {
+  gamePhase = 'lobby'; showScreen('lobby');
+  document.getElementById('lobby-code').textContent = sessionId;
+  document.getElementById('lobby-link').textContent =
+    `${location.origin}${location.pathname}?session=${sessionId}`;
+  document.getElementById('lobby-start-btn').style.display = isHost ? 'flex' : 'none';
+
+  listeners.push(
+    onValue(ref(db,`sessions/${sessionId}/players`), snap => renderLobbyPlayers(snap.val()||{})),
+    onValue(ref(db,`sessions/${sessionId}/phase`),   snap => { if(snap.val()==='fill') enterFill(); })
+  );
+}
+
+function renderLobbyPlayers(players) {
+  const list = document.getElementById('player-list');
+  list.innerHTML = '';
+  Object.entries(players).forEach(([id,p]) => {
+    const d = document.createElement('div');
+    d.className = 'player-item';
+    const dot = id===playerId ? 'me' : (p.ready ? 'ready' : '');
+    d.innerHTML = `<div class="player-dot ${dot}"></div><span>${p.name}</span>
+      ${id===playerId?'<span style="margin-left:auto;font-size:11px;color:var(--text-muted)">Du</span>':''}`;
+    list.appendChild(d);
+  });
+}
+
+window.copyCode = function() {
+  navigator.clipboard.writeText(sessionId).then(() => {
+    const b = document.querySelector('.session-code .copy-btn');
+    b.textContent='Kopiert!'; b.classList.add('copied');
+    setTimeout(()=>{ b.textContent='Kopieren'; b.classList.remove('copied'); },2000);
+  });
+};
+window.copyLink = function() {
+  navigator.clipboard.writeText(document.getElementById('lobby-link').textContent)
+    .then(() => showToast('Link kopiert!'));
+};
+window.startGame = async function() {
+  if (!isHost) return;
+  await update(ref(db,`sessions/${sessionId}`), { phase:'fill' });
+};
+
+// ══════════════════════════════════════
+//  FILL
+// ══════════════════════════════════════
+function enterFill() {
+  if (gamePhase==='fill'||gamePhase==='play') return;
+  gamePhase='fill'; offListeners();
+  // Only reset card if not restoring from session
+  if (!myCard.some(c=>c)) myCard=Array(25).fill('');
+  myMarked=Array(25).fill(false);
+  document.getElementById('host-start-play').style.display='none';
+  const rb = document.getElementById('ready-btn');
+  rb.disabled=true; rb.textContent='Karte einreichen ✓';
+  renderFillGrid(); showScreen('fill');
+  listeners.push(onValue(ref(db,`sessions/${sessionId}/phase`), snap => {
+    if(snap.val()==='play') enterPlay();
+  }));
+}
+
+function renderFillGrid() {
+  const grid = document.getElementById('fill-grid');
+  grid.innerHTML = '';
+  for (let i=0;i<25;i++) {
+    const cell = document.createElement('div');
+    cell.className='bingo-cell editable'; cell.dataset.index=i;
+    const ta = document.createElement('textarea');
+    ta.placeholder='...'; ta.value=myCard[i]||''; ta.maxLength=60;
+    ta.addEventListener('input', ()=>{ myCard[i]=ta.value; updateCounter(); persistState(); });
+    ta.addEventListener('keydown', e=>{ if(e.key==='Enter'){e.preventDefault();focusNext(i);} });
+    cell.appendChild(ta); grid.appendChild(cell);
+  }
+  updateCounter();
+}
+
+function focusNext(i) {
+  const n = document.querySelector(`.bingo-cell[data-index="${i+1}"] textarea`);
+  if(n) n.focus();
+}
+function updateCounter() {
+  const f = myCard.filter(c=>c.trim()).length;
+  document.getElementById('fill-count').textContent=f;
+  document.getElementById('ready-btn').disabled = f<25;
+}
+
+window.shuffleCard = function() {
+  const filled = myCard.filter(c=>c.trim());
+  const empty  = myCard.filter(c=>!c.trim());
+  if (!filled.length) return showToast('Erst Felder ausfüllen!');
+  for(let i=filled.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [filled[i],filled[j]]=[filled[j],filled[i]];
+  }
+  myCard=[...filled,...empty];
+  document.querySelectorAll('#fill-grid .bingo-cell textarea')
+    .forEach((ta,i)=>{ ta.value=myCard[i]||''; });
+  updateCounter();
+  persistState();
+  showToast('🔀 Felder gemischt!');
+};
+
+window.markReady = async function() {
+  if(myCard.filter(c=>c.trim()).length<25) return showToast('Alle 25 Felder ausfüllen!');
+  await set(ref(db,`sessions/${sessionId}/cards/${playerId}`), { cells:myCard, marked:myMarked });
+  await update(ref(db,`sessions/${sessionId}/players/${playerId}`), { ready:true });
+  const rb=document.getElementById('ready-btn');
+  rb.disabled=true; rb.textContent='Warte auf andere…';
+  showToast('Karte gespeichert!');
+  if(isHost) document.getElementById('host-start-play').style.display='flex';
+};
+
+window.hostStartPlay = async function() {
+  await update(ref(db,`sessions/${sessionId}`), { phase:'play' });
+};
+
+// ══════════════════════════════════════
+//  PLAY
+// ══════════════════════════════════════
+function enterPlay() {
+  if(gamePhase==='play') return;
+  gamePhase='play'; offListeners(); showScreen('play');
+  document.getElementById('play-session-code').textContent = sessionId;
+  lastEventTs = Date.now();
+  activeTabId = playerId;
+  bingoShown  = false;
+
+  // Load card from Firebase (source of truth)
+  get(ref(db,`sessions/${sessionId}/cards/${playerId}`)).then(snap => {
+    if(snap.exists()){
+      myCard   = snap.val().cells  || myCard;
+      myMarked = toArr(snap.val().marked) || myMarked;
+    }
+    persistState();
+    renderCardView(playerId);
+    checkBingo(false);
+  });
+
+  listeners.push(
+    onValue(ref(db,`sessions/${sessionId}/cards`), snap => {
+      allCards = snap.val() || {};
+      if(allCards[playerId]?.marked) {
+        myMarked = toArr(allCards[playerId].marked);
+      }
+      if(activeTabId !== playerId) renderCardView(activeTabId);
+      updateTabBingo();
+    }),
+    onValue(ref(db,`sessions/${sessionId}/players`), snap => {
+      allPlayers = snap.val() || {};
+      renderTabs();
+      renderProgress(allPlayers);
+    }),
+    onValue(ref(db,`sessions/${sessionId}/events`), snap => handleEvents(snap.val()))
+  );
+}
+
+// ── TABS ──
+function renderTabs() {
+  const wrap = document.getElementById('player-tabs');
+  const currentActive = activeTabId;
+  wrap.innerHTML = '';
+  const myTab = makeTab(playerId, allPlayers[playerId]?.name || playerName, true);
+  wrap.appendChild(myTab);
+  Object.entries(allPlayers).forEach(([id, p]) => {
+    if(id === playerId) return;
+    wrap.appendChild(makeTab(id, p.name, false, p.hasBingo));
+  });
+  const el = wrap.querySelector(`[data-pid="${currentActive}"]`);
+  (el || wrap.querySelector(`[data-pid="${playerId}"]`)).classList.add('active');
+}
+
+function makeTab(pid, name, isMe, hasBingo=false) {
+  const tab = document.createElement('div');
+  tab.className = 'tab' + (pid===activeTabId?' active':'');
+  tab.dataset.pid = pid;
+  tab.innerHTML = (isMe ? 'Du' : name) + (hasBingo ? ' <span class="tab-bingo">BINGO</span>' : '');
+  tab.addEventListener('click', () => switchTab(pid));
+  return tab;
+}
+
+function updateTabBingo() {
+  document.querySelectorAll('.tab').forEach(tab => {
+    const pid = tab.dataset.pid;
+    if(!pid || pid===playerId) return;
+    const p = allPlayers[pid];
+    if(p?.hasBingo && !tab.querySelector('.tab-bingo')) {
+      const badge = document.createElement('span');
+      badge.className='tab-bingo'; badge.textContent='BINGO';
+      tab.appendChild(badge);
+    }
+  });
+}
+
+function switchTab(pid) {
+  if(pid === activeTabId) return;
+  activeTabId = pid;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.pid===pid));
+  renderCardView(pid);
+}
+
+// ── CARD VIEW ──
+function renderCardView(pid) {
+  const isMe = pid === playerId;
+  const grid  = document.getElementById('play-grid');
+  const badge = document.getElementById('viewing-badge');
+  grid.className = 'bingo-grid ' + (isMe ? 'my-card' : 'opponent-card');
+
+  const card   = isMe ? { cells: myCard, marked: myMarked }
+                      : (allCards[pid] || { cells: Array(25).fill(''), marked: Array(25).fill(false) });
+  const cells  = card.cells  || Array(25).fill('');
+  const marked = toArr(card.marked);
+  const p      = allPlayers[pid] || {};
+
+  badge.className = isMe ? 'viewing-badge' : 'viewing-badge show';
+  if(!isMe) badge.innerHTML = `Karte von <strong>${p.name||'Spieler'}</strong> — nur Ansicht`;
+
+  grid.innerHTML = '';
+  for(let i=0;i<25;i++){
+    const cell = document.createElement('div');
+    const win  = p.hasBingo && isWinCell(marked, i);
+    cell.className = 'bingo-cell' + (win ? ' win-cell' : (marked[i] ? ' marked' : ''));
+    cell.textContent = cells[i] || '';
+    if(isMe) cell.addEventListener('click', () => toggleMark(i));
+    grid.appendChild(cell);
+  }
+
+  if(isMe) { checkBingo(false); }
+  else {
+    const bar = document.getElementById('my-status');
+    bar.className = 'status-bar';
+    bar.textContent = p.hasBingo
+      ? `🏆 ${p.name} hat BINGO!`
+      : `${p.name}: ${marked.filter(Boolean).length}/25 abgehakt`;
+  }
+}
+
+// ── TOGGLE MARK ──
+async function toggleMark(idx) {
+  if(activeTabId !== playerId) { switchTab(playerId); return; }
+  myMarked[idx] = !myMarked[idx];
+  document.querySelectorAll('#play-grid .bingo-cell')[idx]
+    .classList.toggle('marked', myMarked[idx]);
+  persistState();
+  await update(ref(db,`sessions/${sessionId}/cards/${playerId}`), { marked: myMarked });
+  await update(ref(db,`sessions/${sessionId}/players/${playerId}`),
+    { marked: myMarked.filter(Boolean).length });
+  if(myMarked[idx]){
+    await push(ref(db,`sessions/${sessionId}/events`),{
+      type:'mark', playerId, playerName, field: myCard[idx]||'', ts: Date.now()
+    });
+  }
+  checkBingo(true);
+}
+
+// ── BINGO ──
+function getLines() {
+  const L=[];
+  for(let r=0;r<5;r++) L.push([r*5,r*5+1,r*5+2,r*5+3,r*5+4]);
+  for(let c=0;c<5;c++) L.push([c,c+5,c+10,c+15,c+20]);
+  L.push([0,6,12,18,24],[4,8,12,16,20]);
+  return L;
+}
+function minNeeded(marked){
+  let best=5;
+  for(const l of getLines()){ const n=l.filter(i=>!marked[i]).length; if(n<best) best=n; }
+  return best;
+}
+function isWinCell(marked,idx){
+  return getLines().some(l=>l.every(i=>marked[i])&&l.includes(idx));
+}
+
+async function checkBingo(saveToDb) {
+  const lines=getLines();
+  const bingoLines=lines.filter(l=>l.every(i=>myMarked[i]));
+  const hasBingo=bingoLines.length>0;
+
+  if(activeTabId===playerId){
+    const cells=document.querySelectorAll('#play-grid .bingo-cell');
+    cells.forEach(c=>c.classList.remove('win-cell'));
+    if(hasBingo) new Set(bingoLines.flat()).forEach(i=>cells[i].classList.add('win-cell'));
+    const bar=document.getElementById('my-status');
+    if(hasBingo){
+      bar.textContent='🎉 BINGO! Du hast gewonnen!'; bar.className='status-bar bingo-status';
+      if(!bingoShown){ bingoShown=true; showModal('BINGO!', playerName, 'hat eine vollständige Reihe!'); }
+    } else {
+      const left=minNeeded(myMarked);
+      bar.textContent = left===1 ? '🔥 Nur noch 1 Feld bis BINGO!'
+        : `Noch ${left} Felder bis zur nächsten Reihe`;
+      bar.className='status-bar'+(left<=2?' hot':'');
+    }
+  }
+
+  if(saveToDb){
+    await update(ref(db,`sessions/${sessionId}/players/${playerId}`),{hasBingo});
+    if(hasBingo){
+      await push(ref(db,`sessions/${sessionId}/events`),{
+        type:'bingo',playerId,playerName,field:'',ts:Date.now()
+      });
+    }
+  }
+}
+
+// ── PROGRESS ──
+function renderProgress(players) {
+  const wrap=document.getElementById('progress-wrap');
+  wrap.innerHTML='';
+  const entries=Object.entries(players).sort(([a],[b])=>a===playerId?-1:b===playerId?1:0);
+  entries.forEach(([id,p])=>{
+    const cnt=p.marked||0; const pct=Math.round((cnt/25)*100);
+    const d=document.createElement('div');
+    d.className='progress-player';
+    d.innerHTML=`
+      <div class="progress-name${id===playerId?' me':''}">${id===playerId?'Du':p.name}</div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill${p.hasBingo?' done':''}" style="width:${pct}%"></div></div>
+      <div class="progress-label">${p.hasBingo?'🏆 BINGO':`${cnt}/25`}</div>`;
+    wrap.appendChild(d);
+  });
+}
+
+// ── EVENTS / LOG ──
+function handleEvents(eventsObj) {
+  if(!eventsObj) return;
+  const entries=Object.values(eventsObj).sort((a,b)=>a.ts-b.ts);
+  renderLog([...entries].reverse());
+  const latest=entries[entries.length-1];
+  if(latest && latest.playerId!==playerId && latest.ts>lastEventTs){
+    lastEventTs=latest.ts;
+    if(latest.type==='mark')  showLiveNotif('🎯',latest.playerName,latest.field);
+    if(latest.type==='bingo') showLiveNotif('🏆',latest.playerName+' hat BINGO!','');
+  }
+}
+
+function renderLog(entries) {
+  const log=document.getElementById('activity-log');
+  log.innerHTML='';
+  entries.slice(0,40).forEach(e=>{
+    const item=document.createElement('div');
+    item.className='log-item';
+    let html=`<div class="log-time">${fmtTime(e.ts)}</div><div class="log-text">`;
+    if(e.type==='mark')
+      html+=`<span class="log-name">${e.playerName}</span> hat abgehakt: <span class="log-field">„${e.field}"</span>`;
+    else if(e.type==='bingo')
+      html+=`<span class="log-bingo">🏆 ${e.playerName} hat BINGO!</span>`;
+    html+='</div>';
+    item.innerHTML=html;
+    log.appendChild(item);
+  });
+}
+
+// ── MODAL ──
+function showModal(title,sub,msg){
+  document.getElementById('modal-title').textContent=title;
+  document.getElementById('modal-sub').textContent=sub;
+  document.getElementById('modal-msg').textContent=msg;
+  document.getElementById('bingo-modal').classList.add('show');
+}
+window.closeModal=()=>document.getElementById('bingo-modal').classList.remove('show');
+
+window.newGame = async function() {
+  closeModal(); bingoShown=false;
+  await update(ref(db,`sessions/${sessionId}`),{phase:'fill'});
+  const snap=await get(ref(db,`sessions/${sessionId}/players`));
+  const ups={};
+  Object.keys(snap.val()||{}).forEach(pid=>{
+    ups[`sessions/${sessionId}/players/${pid}/ready`]=false;
+    ups[`sessions/${sessionId}/players/${pid}/hasBingo`]=false;
+    ups[`sessions/${sessionId}/players/${pid}/marked`]=0;
+  });
+  await update(ref(db),ups);
+  await remove(ref(db,`sessions/${sessionId}/cards`));
+  await remove(ref(db,`sessions/${sessionId}/events`));
+  // Clear local card so fill phase starts fresh
+  myCard=Array(25).fill(''); myMarked=Array(25).fill(false);
+  persistState();
+};
+
+// ── URL param ──
+(()=>{
+  const code=new URLSearchParams(location.search).get('session');
+  if(code){ const inp=document.getElementById('join-code'); if(inp) inp.value=code; }
+})();
+
+// ── BOOT: try restore, else show home ──
+tryRestore().then(restored => {
+  if(!restored) showScreen('home');
+});
+
+if(firebaseConfig.apiKey==='DEIN_API_KEY')
+  document.getElementById('config-warning').style.display='block';
+</script>
+
+<!-- ═══════ HEADER ═══════ -->
+<header>
+  <div class="logo">BINGO</div>
+  <div class="logo-sub">Multiplayer</div>
+</header>
+
+<!-- ═══════ HOME ═══════ -->
+<div class="screen" id="screen-home">
+  <div id="config-warning" class="config-notice" style="display:none;margin-top:20px;">
+    ⚠️ Firebase noch nicht konfiguriert — ersetze die Platzhalter in <code>firebaseConfig</code>.
+  </div>
+  <div class="panel" style="margin-top:20px;">
+    <div class="panel-title">Dein Name</div>
+    <input type="text" id="home-name" placeholder="Name eingeben…" maxlength="24" autocomplete="off">
+  </div>
+  <div class="panel">
+    <div class="panel-title">Neue Session</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Erstelle eine Runde und teile den Link mit Freunden.</p>
+    <button class="btn btn-primary btn-full" onclick="createSession()">Session starten →</button>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Session beitreten</div>
+    <div class="label">Session-Code</div>
+    <input type="text" id="join-code" placeholder="z.B. AB12CD" maxlength="6"
+      style="text-transform:uppercase;letter-spacing:0.15em;font-family:'Bebas Neue',sans-serif;font-size:16px;" autocomplete="off">
+    <button class="btn btn-ghost btn-full mt-10" onclick="joinSession()">Beitreten</button>
+  </div>
+</div>
+
+<!-- ═══════ LOBBY ═══════ -->
+<div class="screen" id="screen-lobby">
+  <div class="panel" style="margin-top:20px;">
+    <div class="panel-title">Session-Code</div>
+    <div class="session-code">
+      <span id="lobby-code">------</span>
+      <button class="copy-btn" onclick="copyCode()">Kopieren</button>
+    </div>
+    <div class="label">Einladungslink</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div id="lobby-link" style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;"></div>
+      <button class="copy-btn" onclick="copyLink()">Link</button>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Spieler in der Lobby</div>
+    <div class="player-list" id="player-list"></div>
+  </div>
+  <button id="lobby-start-btn" class="btn btn-primary btn-full" onclick="startGame()" style="display:none;">Spiel starten →</button>
+</div>
+
+<!-- ═══════ FILL ═══════ -->
+<div class="screen" id="screen-fill">
+  <div class="panel" style="margin-top:20px;">
+    <div class="panel-title">Deine Bingo-Karte</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Fülle alle 25 Felder aus. Danach kannst du mischen.</p>
+    <div class="bingo-header-row">
+      <div class="bingo-letter">B</div><div class="bingo-letter">I</div>
+      <div class="bingo-letter">N</div><div class="bingo-letter">G</div><div class="bingo-letter">O</div>
+    </div>
+    <div class="bingo-grid" id="fill-grid"></div>
+    <div class="fill-controls">
+      <button class="btn btn-shuffle" onclick="shuffleCard()">🔀 Mischen</button>
+      <div class="fill-counter"><span id="fill-count">0</span> / 25</div>
+    </div>
+  </div>
+  <button id="ready-btn" class="btn btn-primary btn-full" onclick="markReady()" disabled>Karte einreichen ✓</button>
+  <button id="host-start-play" class="btn btn-danger btn-full mt-12" onclick="hostStartPlay()" style="display:none;">Alle bereit — Los geht's! 🎲</button>
+</div>
+
+<!-- ═══════ PLAY ═══════ -->
+<div class="screen" id="screen-play">
+  <div style="width:100%;display:flex;justify-content:space-between;align-items:center;margin:16px 0 12px;padding:0 2px;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:0.08em;color:var(--accent);">BINGO</div>
+    <div style="font-size:11px;color:var(--text-muted)">Session:
+      <span id="play-session-code" style="color:var(--accent);font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:0.1em;"></span>
+    </div>
+  </div>
+
+  <div class="player-tabs" id="player-tabs"></div>
+  <div class="status-bar" id="my-status">Lade…</div>
+
+  <div class="panel">
+    <div id="viewing-badge" class="viewing-badge"></div>
+    <div class="bingo-header-row">
+      <div class="bingo-letter">B</div><div class="bingo-letter">I</div>
+      <div class="bingo-letter">N</div><div class="bingo-letter">G</div><div class="bingo-letter">O</div>
+    </div>
+    <div class="bingo-grid my-card" id="play-grid"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Fortschritt</div>
+    <div class="progress-wrap" id="progress-wrap"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Verlauf</div>
+    <div class="activity-log" id="activity-log"></div>
+  </div>
+
+  <button class="btn btn-ghost btn-full mt-12" onclick="newGame()">🔄 Neue Runde</button>
+</div>
+
+<!-- ═══════ MODAL ═══════ -->
+<div class="modal-overlay" id="bingo-modal">
+  <div class="modal">
+    <h2 id="modal-title">BINGO!</h2>
+    <div class="modal-sub" id="modal-sub"></div>
+    <p id="modal-msg"></p>
+    <div class="modal-btns">
+      <button class="btn btn-primary" style="flex:1;" onclick="newGame()">Neue Runde</button>
+      <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal()">Weiter</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ LIVE NOTIF ═══════ -->
+<div id="live-notif">
+  <div class="notif-inner">
+    <span class="notif-icon">🎯</span>
+    <span><span class="notif-name"></span><span class="notif-field"></span></span>
+  </div>
+</div>
+
+<div id="toast"></div>
+</body>
+</html>
