@@ -412,7 +412,48 @@ function offListeners() { listeners.forEach(fn => fn()); listeners = []; }
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-'+id).classList.add('active');
+  const btn = document.getElementById('leave-btn');
+  if(btn) btn.style.display = (id === 'home') ? 'none' : 'flex';
 }
+
+function handleSessionDeleted() {
+  if (gamePhase === 'home') return;
+  offListeners();
+  SS.clear();
+  sessionId = null;
+  playerId = null;
+  isHost = false;
+  gamePhase = 'home';
+  myCard = Array(cellCount).fill('');
+  myMarked = Array(cellCount).fill(false);
+  showScreen('home');
+  showToast('Die Session wurde vom Host beendet.', 4000);
+}
+
+window.leaveSession = async function() {
+  const msg = isHost 
+    ? 'Du bist der Host. Wenn du gehst, wird die gesamte Session beendet. Wirklich verlassen?'
+    : 'Möchtest du die Session wirklich verlassen?';
+  if (!confirm(msg)) return;
+  
+  if (isHost) {
+    await remove(ref(db, `sessions/${sessionId}`));
+  } else {
+    await remove(ref(db, `sessions/${sessionId}/players/${playerId}`));
+    await remove(ref(db, `sessions/${sessionId}/cards/${playerId}`));
+  }
+  
+  offListeners();
+  SS.clear();
+  sessionId = null;
+  playerId = null;
+  isHost = false;
+  gamePhase = 'home';
+  myCard = Array(cellCount).fill('');
+  myMarked = Array(cellCount).fill(false);
+  showScreen('home');
+  showToast('Session verlassen');
+};
 
 function persistState() {
   SS.save({ sessionId, playerId, playerName, isHost, gamePhase, myCard, myMarked, gridSize });
@@ -516,7 +557,10 @@ function enterLobby() {
 
   listeners.push(
     onValue(ref(db,`sessions/${sessionId}/players`), snap => renderLobbyPlayers(snap.val()||{})),
-    onValue(ref(db,`sessions/${sessionId}/phase`),   snap => { if(snap.val()==='fill') enterFill(); })
+    onValue(ref(db,`sessions/${sessionId}/phase`),   snap => { 
+      if(!snap.exists()) return handleSessionDeleted();
+      if(snap.val()==='fill') enterFill(); 
+    })
   );
 }
 
@@ -568,6 +612,7 @@ function enterFill() {
   
   renderFillGrid(); showScreen('fill');
   listeners.push(onValue(ref(db,`sessions/${sessionId}/phase`), snap => {
+    if(!snap.exists()) return handleSessionDeleted();
     if(snap.val()==='play') enterPlay();
   }));
 }
@@ -662,6 +707,7 @@ function enterPlay() {
 
   listeners.push(
     onValue(ref(db,`sessions/${sessionId}/phase`), snap => {
+      if(!snap.exists()) return handleSessionDeleted();
       if(snap.val()==='fill') enterFill();
     }),
     onValue(ref(db,`sessions/${sessionId}/cards`), snap => {
@@ -935,9 +981,12 @@ if(firebaseConfig.apiKey==='DEIN_API_KEY')
 </script>
 
 <!-- ═══════ HEADER ═══════ -->
-<header>
-  <div class="logo">BINGO</div>
-  <div class="logo-sub">Multiplayer</div>
+<header style="justify-content:space-between;">
+  <div style="display:flex; align-items:flex-end; gap:12px;">
+    <div class="logo">BINGO</div>
+    <div class="logo-sub">Multiplayer</div>
+  </div>
+  <button id="leave-btn" class="btn btn-ghost" onclick="leaveSession()" style="display:none; padding:6px 10px; min-height:auto; font-size:12px; font-family:'DM Sans',sans-serif; letter-spacing:normal;">🚪 Verlassen</button>
 </header>
 
 <!-- ═══════ HOME ═══════ -->
