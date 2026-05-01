@@ -617,6 +617,9 @@ function enterPlay() {
   });
 
   listeners.push(
+    onValue(ref(db,`sessions/${sessionId}/phase`), snap => {
+      if(snap.val()==='fill') enterFill();
+    }),
     onValue(ref(db,`sessions/${sessionId}/cards`), snap => {
       allCards = snap.val() || {};
       if(allCards[playerId]?.marked) {
