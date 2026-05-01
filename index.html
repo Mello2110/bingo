@@ -371,7 +371,12 @@ let allPlayers   = {};
 let bingoShown   = false;  // prevent modal from re-showing on re-render
 
 // ── UTILS ──
-const genId = (n=6) => Math.random().toString(36).substring(2,2+n).toUpperCase();
+const genId = (n=6) => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let id = '';
+  for(let i=0; i<n; i++) id += chars.charAt(Math.floor(Math.random() * chars.length));
+  return id;
+};
 const toArr = v => Array.isArray(v) ? v : (v ? Object.values(v) : []);
 
 function showToast(msg, dur=2400) {
