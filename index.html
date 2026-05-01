@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0e0e10">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
 <title>BINGO</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -547,7 +551,7 @@ window.startGame = async function() {
 //  FILL
 // ══════════════════════════════════════
 function enterFill() {
-  if (gamePhase==='fill'||gamePhase==='play') return;
+  if (gamePhase==='fill') return;
   gamePhase='fill'; offListeners();
   // Only reset card if not restoring from session
   if (!myCard.some(c=>c)) myCard=Array(cellCount).fill('');
@@ -898,8 +902,8 @@ window.newGame = async function() {
   await update(ref(db),ups);
   await remove(ref(db,`sessions/${sessionId}/cards`));
   await remove(ref(db,`sessions/${sessionId}/events`));
-  // Clear local card so fill phase starts fresh
-  myCard=Array(cellCount).fill(''); myMarked=Array(cellCount).fill(false);
+  // Keep myCard so players don't have to re-type, but reset marked array
+  myMarked=Array(cellCount).fill(false);
   persistState();
 };
 
