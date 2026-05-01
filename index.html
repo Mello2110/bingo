@@ -360,6 +360,8 @@ let playerId     = null;
 let playerName   = null;
 let isHost       = false;
 let gamePhase    = 'home';
+let gridSize     = 5;
+let cellCount    = 25;
 let myCard       = Array(25).fill('');
 let myMarked     = Array(25).fill(false);
 let listeners    = [];
@@ -407,7 +409,7 @@ function showScreen(id) {
 }
 
 function persistState() {
-  SS.save({ sessionId, playerId, playerName, isHost, gamePhase, myCard, myMarked });
+  SS.save({ sessionId, playerId, playerName, isHost, gamePhase, myCard, myMarked, gridSize });
 }
 
 // ══════════════════════════════════════
@@ -428,8 +430,10 @@ async function tryRestore() {
   playerId   = saved.playerId;
   playerName = saved.playerName;
   isHost     = saved.isHost;
-  myCard     = saved.myCard   || Array(25).fill('');
-  myMarked   = saved.myMarked || Array(25).fill(false);
+  gridSize   = session.gridSize || saved.gridSize || 5;
+  cellCount  = gridSize * gridSize;
+  myCard     = saved.myCard   || Array(cellCount).fill('');
+  myMarked   = saved.myMarked || Array(cellCount).fill(false);
 
   document.getElementById('reconnect-banner').classList.add('show');
 
@@ -457,9 +461,17 @@ async function tryRestore() {
 window.createSession = async function() {
   const name = document.getElementById('home-name').value.trim();
   if (!name) return showToast('Bitte Namen eingeben');
+  
+  const sizeInputs = document.getElementsByName('gridSize');
+  let selectedSize = 5;
+  for (const rb of sizeInputs) { if(rb.checked) selectedSize = parseInt(rb.value); }
+  
   playerName = name; playerId = genId(8); sessionId = genId(6); isHost = true;
+  gridSize = selectedSize; cellCount = gridSize * gridSize;
+  myCard = Array(cellCount).fill(''); myMarked = Array(cellCount).fill(false);
+  
   await set(ref(db,`sessions/${sessionId}`), {
-    host: playerId, phase: 'lobby', createdAt: Date.now(),
+    host: playerId, phase: 'lobby', createdAt: Date.now(), gridSize: gridSize,
     players: { [playerId]: { name, ready:false, hasBingo:false, marked:0 } }
   });
   persistState();
@@ -473,8 +485,13 @@ window.joinSession = async function() {
   if (code.length < 6) return showToast('Bitte vollständigen Code eingeben');
   const snap = await get(ref(db,`sessions/${code}`));
   if (!snap.exists()) return showToast('Session nicht gefunden');
-  if (snap.val().phase !== 'lobby') return showToast('Spiel läuft bereits — zu spät zum Beitreten');
+  const session = snap.val();
+  if (session.phase !== 'lobby') return showToast('Spiel läuft bereits — zu spät zum Beitreten');
+  
   playerName = name; playerId = genId(8); sessionId = code; isHost = false;
+  gridSize = session.gridSize || 5; cellCount = gridSize * gridSize;
+  myCard = Array(cellCount).fill(''); myMarked = Array(cellCount).fill(false);
+  
   await set(ref(db,`sessions/${sessionId}/players/${playerId}`),
     { name, ready:false, hasBingo:false, marked:0 });
   persistState();
@@ -533,11 +550,16 @@ function enterFill() {
   if (gamePhase==='fill'||gamePhase==='play') return;
   gamePhase='fill'; offListeners();
   // Only reset card if not restoring from session
-  if (!myCard.some(c=>c)) myCard=Array(25).fill('');
-  myMarked=Array(25).fill(false);
+  if (!myCard.some(c=>c)) myCard=Array(cellCount).fill('');
+  myMarked=Array(cellCount).fill(false);
   document.getElementById('host-start-play').style.display='none';
   const rb = document.getElementById('ready-btn');
   rb.disabled=true; rb.textContent='Karte einreichen ✓';
+  
+  document.querySelectorAll('.bingo-header-row').forEach(row => {
+    row.style.display = gridSize === 5 ? 'grid' : 'none';
+  });
+  
   renderFillGrid(); showScreen('fill');
   listeners.push(onValue(ref(db,`sessions/${sessionId}/phase`), snap => {
     if(snap.val()==='play') enterPlay();
@@ -546,8 +568,9 @@ function enterFill() {
 
 function renderFillGrid() {
   const grid = document.getElementById('fill-grid');
+  grid.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
   grid.innerHTML = '';
-  for (let i=0;i<25;i++) {
+  for (let i=0;i<cellCount;i++) {
     const cell = document.createElement('div');
     cell.className='bingo-cell editable'; cell.dataset.index=i;
     const ta = document.createElement('textarea');
@@ -565,8 +588,8 @@ function focusNext(i) {
 }
 function updateCounter() {
   const f = myCard.filter(c=>c.trim()).length;
-  document.getElementById('fill-count').textContent=f;
-  document.getElementById('ready-btn').disabled = f<25;
+  document.querySelector('.fill-counter').innerHTML = `<span id="fill-count">${f}</span> / ${cellCount}`;
+  document.getElementById('ready-btn').disabled = f<cellCount;
 }
 
 window.shuffleCard = function() {
@@ -586,7 +609,7 @@ window.shuffleCard = function() {
 };
 
 window.markReady = async function() {
-  if(myCard.filter(c=>c.trim()).length<25) return showToast('Alle 25 Felder ausfüllen!');
+  if(myCard.filter(c=>c.trim()).length<cellCount) return showToast(`Alle ${cellCount} Felder ausfüllen!`);
   await set(ref(db,`sessions/${sessionId}/cards/${playerId}`), { cells:myCard, marked:myMarked });
   await update(ref(db,`sessions/${sessionId}/players/${playerId}`), { ready:true });
   const rb=document.getElementById('ready-btn');
@@ -692,10 +715,15 @@ function renderCardView(pid) {
   const grid  = document.getElementById('play-grid');
   const badge = document.getElementById('viewing-badge');
   grid.className = 'bingo-grid ' + (isMe ? 'my-card' : 'opponent-card');
+  grid.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+  
+  document.querySelectorAll('.bingo-header-row').forEach(row => {
+    row.style.display = gridSize === 5 ? 'grid' : 'none';
+  });
 
   const card   = isMe ? { cells: myCard, marked: myMarked }
-                      : (allCards[pid] || { cells: Array(25).fill(''), marked: Array(25).fill(false) });
-  const cells  = card.cells  || Array(25).fill('');
+                      : (allCards[pid] || { cells: Array(cellCount).fill(''), marked: Array(cellCount).fill(false) });
+  const cells  = card.cells  || Array(cellCount).fill('');
   const marked = toArr(card.marked);
   const p      = allPlayers[pid] || {};
 
@@ -703,7 +731,7 @@ function renderCardView(pid) {
   if(!isMe) badge.innerHTML = `Karte von <strong>${p.name||'Spieler'}</strong> — nur Ansicht`;
 
   grid.innerHTML = '';
-  for(let i=0;i<25;i++){
+  for(let i=0;i<cellCount;i++){
     const cell = document.createElement('div');
     const win  = p.hasBingo && isWinCell(marked, i);
     cell.className = 'bingo-cell' + (win ? ' win-cell' : (marked[i] ? ' marked' : ''));
@@ -718,7 +746,7 @@ function renderCardView(pid) {
     bar.className = 'status-bar';
     bar.textContent = p.hasBingo
       ? `🏆 ${p.name} hat BINGO!`
-      : `${p.name}: ${marked.filter(Boolean).length}/25 abgehakt`;
+      : `${p.name}: ${marked.filter(Boolean).length}/${cellCount} abgehakt`;
   }
 }
 
@@ -743,9 +771,22 @@ async function toggleMark(idx) {
 // ── BINGO ──
 function getLines() {
   const L=[];
-  for(let r=0;r<5;r++) L.push([r*5,r*5+1,r*5+2,r*5+3,r*5+4]);
-  for(let c=0;c<5;c++) L.push([c,c+5,c+10,c+15,c+20]);
-  L.push([0,6,12,18,24],[4,8,12,16,20]);
+  for(let r=0; r<gridSize; r++) {
+    const row = [];
+    for(let c=0; c<gridSize; c++) row.push(r*gridSize + c);
+    L.push(row);
+  }
+  for(let c=0; c<gridSize; c++) {
+    const col = [];
+    for(let r=0; r<gridSize; r++) col.push(r*gridSize + c);
+    L.push(col);
+  }
+  const diag1 = [], diag2 = [];
+  for(let i=0; i<gridSize; i++) {
+    diag1.push(i*gridSize + i);
+    diag2.push(i*gridSize + (gridSize - 1 - i));
+  }
+  L.push(diag1, diag2);
   return L;
 }
 function minNeeded(marked){
@@ -794,13 +835,13 @@ function renderProgress(players) {
   wrap.innerHTML='';
   const entries=Object.entries(players).sort(([a],[b])=>a===playerId?-1:b===playerId?1:0);
   entries.forEach(([id,p])=>{
-    const cnt=p.marked||0; const pct=Math.round((cnt/25)*100);
+    const cnt=p.marked||0; const pct=Math.round((cnt/cellCount)*100);
     const d=document.createElement('div');
     d.className='progress-player';
     d.innerHTML=`
       <div class="progress-name${id===playerId?' me':''}">${id===playerId?'Du':p.name}</div>
       <div class="progress-bar-bg"><div class="progress-bar-fill${p.hasBingo?' done':''}" style="width:${pct}%"></div></div>
-      <div class="progress-label">${p.hasBingo?'🏆 BINGO':`${cnt}/25`}</div>`;
+      <div class="progress-label">${p.hasBingo?'🏆 BINGO':`${cnt}/${cellCount}`}</div>`;
     wrap.appendChild(d);
   });
 }
@@ -858,7 +899,7 @@ window.newGame = async function() {
   await remove(ref(db,`sessions/${sessionId}/cards`));
   await remove(ref(db,`sessions/${sessionId}/events`));
   // Clear local card so fill phase starts fresh
-  myCard=Array(25).fill(''); myMarked=Array(25).fill(false);
+  myCard=Array(cellCount).fill(''); myMarked=Array(cellCount).fill(false);
   persistState();
 };
 
@@ -895,8 +936,34 @@ if(firebaseConfig.apiKey==='DEIN_API_KEY')
   <div class="panel">
     <div class="panel-title">Neue Session</div>
     <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Erstelle eine Runde und teile den Link mit Freunden.</p>
+    
+    <div class="label" style="margin-top: 16px;">Spielfeldgröße</div>
+    <div style="display:flex; gap: 10px; margin-bottom: 18px;" id="grid-size-selector">
+      <label class="size-label" style="flex:1; background:var(--surface2); padding:10px; border-radius:8px; text-align:center; cursor:pointer; border:1px solid var(--border);">
+        <input type="radio" name="gridSize" value="3" style="display:none;" onchange="updateSizeUI(this)"> 3x3<br><span style="font-size:10px;color:var(--text-muted)">9 Felder</span>
+      </label>
+      <label class="size-label" style="flex:1; background:var(--surface2); padding:10px; border-radius:8px; text-align:center; cursor:pointer; border:1px solid var(--border);">
+        <input type="radio" name="gridSize" value="4" style="display:none;" onchange="updateSizeUI(this)"> 4x4<br><span style="font-size:10px;color:var(--text-muted)">16 Felder</span>
+      </label>
+      <label class="size-label" style="flex:1; background:var(--surface2); padding:10px; border-radius:8px; text-align:center; cursor:pointer; border:1px solid var(--accent); color:var(--accent)">
+        <input type="radio" name="gridSize" value="5" checked style="display:none;" onchange="updateSizeUI(this)"> 5x5<br><span style="font-size:10px;color:var(--accent)">25 Felder</span>
+      </label>
+    </div>
+    
     <button class="btn btn-primary btn-full" onclick="createSession()">Session starten →</button>
   </div>
+  <script>
+    function updateSizeUI(radio) {
+      document.querySelectorAll('.size-label').forEach(lbl => {
+        lbl.style.borderColor = 'var(--border)';
+        lbl.style.color = 'var(--text)';
+        lbl.querySelector('span').style.color = 'var(--text-muted)';
+      });
+      radio.parentElement.style.borderColor = 'var(--accent)';
+      radio.parentElement.style.color = 'var(--accent)';
+      radio.parentElement.querySelector('span').style.color = 'var(--accent)';
+    }
+  </script>
   <div class="panel">
     <div class="panel-title">Session beitreten</div>
     <div class="label">Session-Code</div>
@@ -931,7 +998,7 @@ if(firebaseConfig.apiKey==='DEIN_API_KEY')
 <div class="screen" id="screen-fill">
   <div class="panel" style="margin-top:20px;">
     <div class="panel-title">Deine Bingo-Karte</div>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Fülle alle 25 Felder aus. Danach kannst du mischen.</p>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;" id="fill-hint">Fülle alle Felder aus. Danach kannst du mischen.</p>
     <div class="bingo-header-row">
       <div class="bingo-letter">B</div><div class="bingo-letter">I</div>
       <div class="bingo-letter">N</div><div class="bingo-letter">G</div><div class="bingo-letter">O</div>
