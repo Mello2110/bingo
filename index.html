@@ -393,6 +393,33 @@ function showToast(msg, dur=2400) {
   setTimeout(() => t.classList.remove('show'), dur);
 }
 
+window.customConfirm = function(title, msg, confirmText='OK', cancelText='Abbrechen', isDanger=true) {
+  return new Promise(resolve => {
+    const modal = document.getElementById('confirm-modal');
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-msg').textContent = msg;
+    
+    const btnCancel = document.getElementById('confirm-cancel');
+    const btnOk = document.getElementById('confirm-ok');
+    
+    btnCancel.textContent = cancelText;
+    btnOk.textContent = confirmText;
+    btnOk.className = 'btn ' + (isDanger ? 'btn-danger' : 'btn-primary');
+    btnOk.style.flex = '1';
+    
+    modal.classList.add('show');
+    
+    const cleanup = () => {
+      btnOk.onclick = null;
+      btnCancel.onclick = null;
+      modal.classList.remove('show');
+    };
+    
+    btnOk.onclick = () => { cleanup(); resolve(true); };
+    btnCancel.onclick = () => { cleanup(); resolve(false); };
+  });
+};
+
 function showLiveNotif(icon, name, field) {
   const el = document.getElementById('live-notif');
   el.querySelector('.notif-icon').textContent  = icon;
@@ -434,7 +461,8 @@ window.leaveSession = async function() {
   const msg = isHost 
     ? 'Du bist der Host. Wenn du gehst, wird die gesamte Session beendet. Wirklich verlassen?'
     : 'Möchtest du die Session wirklich verlassen?';
-  if (!confirm(msg)) return;
+  const confirmed = await customConfirm('Session verlassen', msg, 'Verlassen', 'Bleiben');
+  if (!confirmed) return;
   
   if (isHost) {
     await remove(ref(db, `sessions/${sessionId}`));
@@ -659,8 +687,9 @@ window.shuffleCard = function() {
   showToast('🔀 Felder gemischt!');
 };
 
-window.clearCard = function() {
-  if (!confirm('Wirklich alle Eingaben löschen?')) return;
+window.clearCard = async function() {
+  const confirmed = await customConfirm('Felder leeren', 'Wirklich alle Eingaben löschen?', 'Ja, löschen', 'Abbrechen');
+  if (!confirmed) return;
   myCard = Array(cellCount).fill('');
   document.querySelectorAll('#fill-grid .bingo-cell textarea')
     .forEach(ta => { ta.value = ''; });
@@ -1122,6 +1151,18 @@ if(firebaseConfig.apiKey==='DEIN_API_KEY')
     <div class="modal-btns">
       <button class="btn btn-primary" style="flex:1;" onclick="newGame()">Neue Runde</button>
       <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal()">Weiter</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ CONFIRM MODAL ═══════ -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal">
+    <h2 id="confirm-title" style="font-size:36px; margin-bottom:8px;">BESTÄTIGEN</h2>
+    <p id="confirm-msg" style="margin-bottom:24px; font-size:14px; color:var(--text);"></p>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" id="confirm-cancel" style="flex:1;">Abbrechen</button>
+      <button class="btn btn-danger" id="confirm-ok" style="flex:1;">OK</button>
     </div>
   </div>
 </div>
